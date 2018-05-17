@@ -1,0 +1,241 @@
+			      ____________
+
+			       A4 WRITEUP
+			      ____________
+
+
+- Name: RenJeik Ong
+- NetID: ongxx107
+
+Answer the questions below according to the lab specification. Write
+your answers directly in this text file and submit it to complete the
+lab.
+
+
+PROBLEM 1: optimized_matrix_trans_mult_vec()
+============================================
+
+  Do your timing study on apollo.cselabs.umn.edu
+
+
+(A) Paste Source Code
+~~~~~~~~~~~~~~~~~~~~~
+
+  Paste a copy of your source code for the function
+  optimized_matrix_trans_mult_vec() below.
+
+	#include "matvec.h"
+	#include <stdlib.h>
+
+	int optimized_matrix_trans_mult_vec(matrix_t mat, vector_t vec, vector_t res){
+
+	  // store these struct element type into local variables that reduce calls
+	  long vecLen = vec.len;        // store the vector length to local variable
+	  long resLen = res.len;        // store the result(vec) length to local variable
+	  long rows = mat.rows;         // store the row length to local variable
+	  long cols = mat.cols;         // store the column length to local variable
+
+	  /*
+	  check if the length of column matches with vector length for matrix multi.
+	  */
+	  if(cols != vecLen){
+	    printf("mat.cols (%ld) != vec.len (%ld)\n",cols,vecLen);
+	    return 1;
+	  }
+
+	  /*
+	  check if the length of row matches with result length for matrix multi.
+	  */
+	  if(rows != resLen){
+	    printf("mat.rows (%ld) != res.len (%ld)\n",rows,resLen);
+	    return 2;
+	  }
+
+	  for(int i=0; i<resLen; i++){  // iteration vector which is 1-D array
+	    VSET(res,i,0);              // initialize res[i] to zero
+	  }
+
+	  /*
+	  This is row major matrix such that we start the computation through row by
+	  row so it takes less time and less jump as the next entry is stored in cache.
+	  In inner loop, we compute each row multiplication with 4 entries. Thus,
+	  we have j+=4 compared to j++ which runs every matrix entry individually in a
+	  single loop.
+	  */
+	  for(int i=0; i<rows; i++){
+	    int j;
+	    for( j=0; j<cols-4; j+=4){
+	      int vecj = VGET(vec,i);	  // reuse vecj since they all are the same entry
+
+	      int elij = MGET(mat,i,j);
+	      int prod = elij * vecj;
+	      int curr = VGET(res, j);
+	      int next = curr + prod;
+	      VSET(res,j, next);          // add on the newest product
+
+	      int elij1 = MGET(mat,i,j+1);
+	      int prod1 = elij1 * vecj;
+	      int curr1 = VGET(res, j+1);
+	      int next1 = curr1 + prod1;
+	      VSET(res,j+1, next1);        // add on the newest product
+
+	      int elij2 = MGET(mat,i,j+2);
+	      int prod2 = elij2 * vecj;
+	      int curr2 = VGET(res, j+2);
+	      int next2 = curr2 + prod2;
+	      VSET(res,j+2, next2);        // add on the newest product
+
+	      int elij3 = MGET(mat,i,j+3);
+	      int prod3 = elij3 * vecj;
+	      int curr3 = VGET(res, j+3);
+	      int next3 = curr3 + prod3;
+	      VSET(res,j+3, next3);        // add on the newest product
+	    }
+	    // do the remainder if the matrix isn't 2^n
+	    // do the cleanup if the array is reached the end
+	    for(; j<cols; j++){
+	      int elij1 = MGET(mat,i,j);
+	      int vecj1 = VGET(vec,i);
+	      int prod1 = elij1 * vecj1;
+	      int curr1 = VGET(res, j);
+	      int next1 = curr1 + prod1;
+	      VSET(res,j, next1);          // add on the newest product
+	    }
+
+	  }
+	  return 0;
+	}
+
+(B) Timing on Apollo
+~~~~~~~~~~~~~~~~~~~~
+
+  Paste a copy of the results of running `mult_bench' on
+  apollo.cselabs.umn.edu in the space below which shows how your
+  performance optimizations improved on the baseline codes.
+
+	ongxx107@csel-apollo:/home/ongxx107/csci2021/a4-code $ ./mult_benchmark
+	  SIZE       BASE       NORM        OPT BSPDUP NSPDUP POINTS
+	   512 1.8890e-03 1.6020e-03 1.2030e-03   1.57   1.33      0
+	  1024 3.0153e-02 4.6730e-03 2.7220e-03  11.08   1.72      5
+	  2048 3.0799e-01 1.7604e-02 2.6273e-02  11.72   0.67      5
+	  4096 1.1656e+00 1.1845e-01 4.4167e-02  26.39   2.68     14
+	  8192 4.9185e+00 3.1972e-01 1.6998e-01  28.94   1.88     14
+	RAW POINTS: 38
+	TOTAL POINTS: 35 / 35
+
+	ongxx107@csel-apollo:/home/ongxx107/csci2021/a4-code $ ./mult_benchmark
+	  SIZE       BASE       NORM        OPT BSPDUP NSPDUP POINTS
+	   512 1.2480e-03 1.0410e-03 5.8900e-04   2.12   1.77      1
+	  1024 1.9827e-02 4.2810e-03 2.4210e-03   8.19   1.77      4
+	  2048 2.6037e-01 1.7205e-02 1.0304e-02  25.27   1.67     12
+	  4096 1.0912e+00 7.0169e-02 4.4123e-02  24.73   1.59     12
+	  8192 4.4869e+00 2.7581e-01 1.7687e-01  25.37   1.56     12
+	RAW POINTS: 41
+	TOTAL POINTS: 35 / 35
+
+(C) Optimizations
+~~~~~~~~~~~~~~~~~
+
+  Describe in some detail the optimizations you used to speed the code
+  up.  THE CODE SHOULD CONTAIN SOME COMMENTS already to describe these
+  but in the section below, describe in English the techniques you used
+  to make the code run faster.  Format your descriptions into discrete
+  chunks such as.
+        Optimization 1: I use row major form to do the iteration. This is
+												because the cache reads/preloads the data in row major
+												form. Thus, we could retrieve data faster and less jump
+												for computation compared to column major.
+
+        Optimization 2: I use local variables. This will reduce the struct type
+												being called.
+
+				Optimization 3: I use loop pipelining. I use different local variable
+												such as elij1, elij2 for each iteration with enrolling.
+												When elij1 is used, the next column elij2 will start
+												multiplication through pipelining. This will run the
+												macros at the same time. Thus, the performance is faster.
+
+				Optimization 4: I use loop unrolling with cleanup.In inner loop, I
+												unrolling by factor of 4. Thus, 3 iterations is able to
+												do simultaneously and throughput with parallelism
+												increases. Last, I cleanup the loop at the end if
+												there's remainder.
+
+PROBLEM 2: Timing Rows vs Columns
+=================================
+
+  Do your timing study on apollo.cselabs.umn.edu
+
+
+(A) Min Size for Algorithmic Differences
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+  Determine size of input array does one start to see a measurable
+  difference in the performance of the linear and logarithmic
+  algorithms.  Produce a timing table which includes all algorithms
+  which clearly demonstrates an uptick in the times associated with some
+  while others remain much lower.  Identify what size this appears to be
+  a occur.
+
+	LENGTH SEARCHES      array       list     binary       tree
+       2        4 2.0000e-06 2.0000e-06 1.0000e-06 1.0000e-06
+       4        8 1.0000e-06 2.0000e-06 1.0000e-06 1.0000e-06
+       8       16 2.0000e-06 2.0000e-06 2.0000e-06 2.0000e-06
+      16       32 3.0000e-06 2.0000e-06 2.0000e-06 2.0000e-06
+      32       64 6.0000e-06 6.0000e-06 5.0000e-06 4.0000e-06
+      64      128 1.5000e-05 1.9000e-05 7.0000e-06 6.0000e-06
+     128      256 4.4000e-05 6.6000e-05 1.5000e-05 1.2000e-05
+     256      512 1.5100e-04 2.5400e-04 3.1000e-05 2.3000e-05
+     512     1024 5.7100e-04 1.0000e-03 6.7000e-05 4.7000e-05
+    1024     2048 2.2150e-03 4.5970e-03 1.4100e-04 1.0000e-04
+    2048     4096 8.7320e-03 6.2792e-02 3.4300e-04 2.2800e-04
+    4096     8192 3.4854e-02 2.9194e-01 6.9700e-04 4.7200e-04
+    8192    16384 1.3944e-01 1.2797e+00 1.5500e-03 1.1100e-03
+   16384    32768 5.6212e-01 5.4381e+00 3.3230e-03 2.3740e-03
+   32768    65536 2.2436e+00 2.1978e+01 7.5200e-03 5.4210e-03
+   65536   131072 8.9414e+00 7.1212e+01 1.6807e-02 1.3100e-02
+
+At length 1024, we could see the big difference runtime between linear and
+logarithmic algorithms. As the length increases, there is a high time difference
+between searches increases for linear algorithm (array and linked list).
+However, as the length increases, there is not much time difference
+between searches increases for logarithmic algorithm (binary and tree). Thus,
+we could see logarithmic algorithm is more efficient than linear algorithm at
+length 65536. We could see list takes 71 seconds to do the search and tree takes
+0.0013 second.
+
+
+(B) List vs Array
+~~~~~~~~~~~~~~~~~
+
+  Determine whether the linear array and linked list search remain
+  approximately at the same performance level as size increases to large
+  data or whether one begins to become favorable over other. Determine
+  the approximate size at which this divergence becomes obvious. Discuss
+  reasons WHY this difference arises.
+
+As the size(length) increases, linear array search is faster than linked list
+search. At line 65536, linear array takes 9 seconds and linked list takes 71
+seconds. However, they share the same time if the length is small. This is
+because linear array stores the data in sequence whereas linked list stores the
+data randomly or not in sequence. Thus, linked list requires more time with more
+jump for data retrieval as the length increases.
+
+(C) Tree vs Array
+~~~~~~~~~~~~~~~~~
+
+  Compare the binary array search and binary tree search on small to
+  very large arrays. Determine if there is a size at which the
+  performance of these two begins to diverge. If so, describe why this
+  might be happening based on your understanding of the data structures
+  and the memory system.
+
+Same performance between binary tree and binary array at any length. This is due
+to they use divide and conquered algorithm and they both use O(log n) runtime.
+
+(D) OPTIONAL MAKEUP CREDIT
+~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+  If you decided to make use of a table of function pointers/structs
+  which is worth makeup credit, describe your basic design for this
+  below.
